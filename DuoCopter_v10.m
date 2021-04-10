@@ -3,50 +3,62 @@ close all
 clc
 
 
-config.m = 1;
-config.g = 9.8;
-config.L = 1;
-config.I = 1/12*config.m*config.L^2;
+%% CONFIGURATION
 
-config.Ncontrollers = 20;
-config.lqr_theta_vec = linspace(-pi,pi, 31);
-config.lqr_use_nonlinear = false;
+% Geometry
+config.m = 1; % mass
+config.g = 9.8; % gravitational constant
+config.L = 1; % length
+config.I = 1/12*config.m*config.L^2; % moment of intertia
 
-config.dt = .01;
-config.Nsteps = 5000;
-config.t = 0:config.dt:config.dt*(config.Nsteps-1);
-config.xLims = [-10 10];
-config.yLims = [-10 10];
-config.targetall = make_target(config.t);
+% Controler
+config.Ncontrollers = 50; % # of duocopters
+config.lqr_use_nonlinear = false; % toggle to re-calculate LQR K at different thetas (better performance)
+config.lqr_theta_vec = linspace(-pi,pi, 31);  % number of LQR interpolation points non nonlinear LQR
 
-config.play_animation = true;
-config.frametime = .01;
-config.play_every_n_frames = 2;
-config.mycolors = lines(config.Ncontrollers);
+% Simulation
+config.dt = .01; % simulation time step
+config.Nsteps = 5000; % number of steps
+config.t = 0:config.dt:config.dt*(config.Nsteps-1); % time vector (do not change)
+config.xLims = [-10 10]; % x boundaries
+config.yLims = [-10 10]; % y boundaries
+config.targetall = make_target(config.t); % [Nsteps x 6] target vector repretsenting desired {x, y, theta, vx, vy, w} for every step
 
-rng(0);
-X0 = zeros(8,config.Ncontrollers);
-XU = zeros(config.Nsteps,8, config.Ncontrollers);
-XU(1, :,:) = X0;
-
-
-
-for ic = 1:config.Ncontrollers
-    Q = eye(6).*([1 1 1 10 10 100] + 1000*rand(1,6));
-    R = eye(2).*rand().*[100 100];
-    
-    config.K{ic} = calc_k_LQR([0 0 0 0 0 0], config, Q, R);
-    
-    for itheta = length(config.lqr_theta_vec):-1:1
-        KNL(itheta,:, :) = calc_k_LQR([0 0 config.lqr_theta_vec(itheta) 0 0 0], config, Q, R);
-        
-    end
-    config.KNL{ic} = KNL;
-    
-end
+% Plotting and Animation
+config.play_animation = true; % toggle to play animation
+config.frametime = .01; % frametime of animation (does not affect simulation)
+config.play_every_n_frames = 2; % play 1 of every n frames (to speed up animation)
+config.mycolors = lines(config.Ncontrollers); % [Ncontrollers x 3] rgb for desired colors for every duocopter 
 
 
-%%
+
+
+%% SIMULATION
+
+[config, XU] = set_up_controllers(config);
+[XU, config] = run_simulation(config, XU);
+make_static_plot(XU, config);
+plot_duocopter(XU, config)
+
+
+
+
+
+
+
+
+
+
+
+
+
+%% FUNCTIONS
+
+
+
+
+
+function [XU, config] = run_simulation(config, XU)
 
 for istep = 2:config.Nsteps
     config.target = config.targetall(istep,:);
@@ -58,12 +70,31 @@ for istep = 2:config.Nsteps
     XU(istep,:,:) = duocopter_dynamics(squeeze(XU(istep-1,:,:)), config);
 end
 
-disp('done with simulation');
+disp('done running simulation');
 
-make_static_plot(XU, config);
-plot_duocopter(XU, config)
+end 
 
 
+
+function [config, XU] = set_up_controllers(config)
+rng(0);
+X0 = zeros(8,config.Ncontrollers);
+XU = zeros(config.Nsteps,8, config.Ncontrollers);
+XU(1, :,:) = X0;
+
+for ic = 1:config.Ncontrollers
+    Q = eye(6).*([1 1 1 10 10 100] + 1000*rand(1,6));
+    R = eye(2).*rand().*[100 100];
+    
+    config.K{ic} = calc_k_LQR([0 0 0 0 0 0], config, Q, R);
+    
+    for itheta = length(config.lqr_theta_vec):-1:1
+        KNL(itheta,:, :) = calc_k_LQR([0 0 config.lqr_theta_vec(itheta) 0 0 0], config, Q, R);     
+    end
+    config.KNL{ic} = KNL;
+    
+end
+end 
 
 
 function T = make_target(t)
@@ -128,6 +159,9 @@ plot(squeeze(XU(end,1,:)), squeeze(XU(end,2,:)), 'kx')
 title('y vs. x')
 hold off
 axis equal
+
+drawnow
+
 end
 
 
@@ -278,6 +312,7 @@ if config.play_animation
     
     for it = 1:config.play_every_n_frames:size(XU, 1)
         tic
+        handles.hfig.Visible = 0;
         for ic = 1:Ncontrollers
             x = XU(it,1, ic);
             y = XU(it,2, ic);
@@ -302,6 +337,8 @@ if config.play_animation
         if dt_frame<config.frametime
             pause(config.frametime-dt_frame);
         end
+        handles.hfig.Visible = 1;
+        drawnow
         
     end
 end
