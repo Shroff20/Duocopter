@@ -8,9 +8,9 @@ config.g = 9.8;
 config.L = 1;
 config.I = 1/12*config.m*config.L^2;
 
-config.Ncontrollers = 10;
+config.Ncontrollers = 20;
 config.lqr_theta_vec = linspace(-pi,pi, 31);
-config.lqr_use_nonlinear = true;
+config.lqr_use_nonlinear = false;
 
 config.dt = .01;
 config.Nsteps = 5000;
@@ -22,6 +22,7 @@ config.targetall = make_target(config.t);
 config.play_animation = true;
 config.frametime = .01;
 config.play_every_n_frames = 2;
+config.mycolors = lines(config.Ncontrollers);
 
 rng(0);
 X0 = zeros(8,config.Ncontrollers);
@@ -36,8 +37,7 @@ for ic = 1:config.Ncontrollers
     
     config.K{ic} = calc_k_LQR([0 0 0 0 0 0], config, Q, R);
     
-    
-    for itheta = 1:1:length(config.lqr_theta_vec)
+    for itheta = length(config.lqr_theta_vec):-1:1
         KNL(itheta,:, :) = calc_k_LQR([0 0 config.lqr_theta_vec(itheta) 0 0 0], config, Q, R);
         
     end
@@ -58,11 +58,9 @@ for istep = 2:config.Nsteps
     XU(istep,:,:) = duocopter_dynamics(squeeze(XU(istep-1,:,:)), config);
 end
 
+disp('done with simulation');
 
-disp('done');
-
-
-make_static_plot(XU, config)
+make_static_plot(XU, config);
 plot_duocopter(XU, config)
 
 
@@ -70,42 +68,55 @@ plot_duocopter(XU, config)
 
 function T = make_target(t)
 
-x = linspace(0,t(end),5);
+
 y = .5*[10 10 0 0 0 0
     -10 10 0 0 0 0
     -10 -10 0 0 0 0
     10 -10 0 0 0 0
     10 10 0 0 0 0];
+
+x = linspace(0,t(end),size(y,1));
 T = interp1(x', y, mod(2*t, t(end)), 'previous');
+
+
+
+
+
 
 end
 
 
 
-function make_static_plot(XU, config)
+function hfig = make_static_plot(XU, config)
+
+mycolors = config.mycolors;
+colormap(mycolors)
 
 hfig = figure();
 
-subplot(3,2,2);
+hax = subplot(3,2,2);
 hold on
-plot(squeeze(XU(:,1,:)))
-plot(squeeze(XU(:,2,:)))
+h1 = plot(config.t, squeeze(XU(:,1,:)));
+hax.ColorOrderIndex = 1;
+h2 = plot(config.t, squeeze(XU(:,2,:)), '--');
 xlabel('t'); ylabel('position');
-legend('x', 'y')
+legend([h1(1) h2(1)], {'x', 'y'})
 hold off
 
-subplot(3,2,4);
+
+hax = subplot(3,2,4);
 hold on
-plot(squeeze(XU(:,7,:))/(config.m*config.g))
-plot(squeeze(XU(:,8,:))/(config.m*config.g))
+h1 = plot(config.t,squeeze(XU(:,7,:))/(config.m*config.g));
+hax.ColorOrderIndex = 1;
+h2 = plot(config.t,squeeze(XU(:,8,:))/(config.m*config.g), '--');
 xlabel('t');
 ylabel('force/mg')
-legend('F_1', 'F_2')
+legend([h1(1) h2(1)],{'F_1', 'F_2'})
 hold off
 
 subplot(3,2,6);
 hold on
-plot(squeeze(XU(:,3,:))*180/pi)
+plot(config.t,squeeze(XU(:,3,:))*180/pi)
 ylabel('\theta (deg)')
 xlabel('t');
 hold off
@@ -155,7 +166,7 @@ B = [0 0
 %Q = eye(6).*[1 1 1 1 1 10];
 %R = eye(2).*[.1 .1];
 
-[K,S,CLP] = lqr(A, B, Q, R);
+[K,~,~] = lqr(A, B, Q, R);
 end
 
 
@@ -172,7 +183,7 @@ if config.lqr_use_nonlinear
     if isempty(I)
         K = squeeze(interp1(config.lqr_theta_vec, config.KNL{ic}, XU(3), 'nearest', 'extrap'));
     else
-        tmp = [config.KNL{ic}(I, :, :)];
+        tmp = config.KNL{ic}(I, :, :);
         K(:, :) = tmp(1, :, :);
         %K = squeeze([config.KNL{ic}(I, :, :)]);
     end
@@ -245,7 +256,7 @@ if config.play_animation
     axis equal
     handles.hax.XLim=config.xLims;
     handles.hax.YLim=config.yLims;
-    handles.mycolors = lines(Ncontrollers);
+    handles.mycolors = config.mycolors;
     
     hold on
     
