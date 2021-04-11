@@ -12,8 +12,8 @@ config.L = 1; % length
 config.I = 1/12*config.m*config.L^2; % moment of intertia
 
 % Controler
-config.Ncontrollers = 50; % # of duocopters
-config.lqr_use_nonlinear = false; % toggle to re-calculate LQR K at different thetas (better performance)
+config.Ncontrollers = 20; % # of duocopters
+config.lqr_use_nonlinear = true; % toggle to re-calculate LQR K at different thetas (better performance)
 config.lqr_theta_vec = linspace(-pi,pi, 31);  % number of LQR interpolation points non nonlinear LQR
 
 % Simulation
@@ -251,6 +251,10 @@ function X2 = duocopter_dynamics(X, config)
 %X(7,:) = F1
 %X(8,:) = F2
 
+if size(X,1) ==1
+    X = X';
+end 
+
 Fx = -sin(X(3,:)).*(X(7,:)+ X(8,:));
 Fy = cos(X(3,:)).*(X(7,:)+ X(8,:)) - config.m*config.g;
 M = config.L/2*(X(8,:)-X(7,:));
@@ -291,6 +295,7 @@ if config.play_animation
     handles.hax.XLim=config.xLims;
     handles.hax.YLim=config.yLims;
     handles.mycolors = config.mycolors;
+    disableDefaultInteractivity(handles.hax)
     
     hold on
     
@@ -308,11 +313,14 @@ if config.play_animation
         handles.ship{ic} = hl;
     end
     
+    handles.target = plot(nan,nan, 'MarkerEdgeColor', 'k', 'Marker', 'o', 'MarkerSize', 20);
+    
     hold off
     
     for it = 1:config.play_every_n_frames:size(XU, 1)
+        
         tic
-        handles.hfig.Visible = 0;
+        
         for ic = 1:Ncontrollers
             x = XU(it,1, ic);
             y = XU(it,2, ic);
@@ -330,15 +338,17 @@ if config.play_animation
             yvalues = num2cell(yr, 2);
             [handles.ship{ic}.XData] =  xvalues{:};
             [handles.ship{ic}.YData] = yvalues{:};
-            
+  
         end
         
+        set( handles.target, 'XData', config.targetall(it,1), 'YData', config.targetall(it,2));
         dt_frame = toc;
+        
         if dt_frame<config.frametime
             pause(config.frametime-dt_frame);
         end
-        handles.hfig.Visible = 1;
-        drawnow
+        
+        drawnow limitrate 
         
     end
 end
